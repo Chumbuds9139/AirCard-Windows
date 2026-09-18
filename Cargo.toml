@@ -8,6 +8,7 @@ license = "MIT"
 [dependencies]
 anyhow = "1.0"
 base64 = "0.23"
+flate2 = "1"
 eframe = { version = "0.33", default-features = true }
 egui = "0.33"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
