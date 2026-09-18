@@ -143,6 +143,7 @@ dependencies = [
  "anyhow",
  "base64",
  "eframe",
+ "flate2",
  "egui",
  "image",
  "libloading",
