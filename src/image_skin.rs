@@ -81,44 +81,56 @@ fn encode_card_pdf(image: &RgbaImage) -> Result<Vec<u8>> {
 
     let rgb_stream = deflate(&rgb)?;
     let alpha_stream = deflate(&alpha)?;
-
-    let content = format!(
-        "q\n{} 0 0 {} 0 0 cm\n/Im1 Do\nQ\n",
-        width, height
-    );
-
-    let objects = vec![
-        format!("<< /Type /Catalog /Pages 2 0 R >>"),
-        format!("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
-        format!(
-            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {} {}] /Resources << /XObject << /Im1 4 0 R >> >> /Contents 6 0 R >>",
-            width, height
-        ),
-        format!(
-            "<< /Type /XObject /Subtype /Image /Width {} /Height {} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /SMask 5 0 R /Length {} >>\nstream\n{}\nendstream",
-            width,
-            height,
-            rgb_stream.len(),
-            String::from_utf8_lossy(&rgb_stream)
-        ),
-        format!(
-            "<< /Type /XObject /Subtype /Image /Width {} /Height {} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /Length {} >>\nstream\n{}\nendstream",
-            width,
-            height,
-            alpha_stream.len(),
-            String::from_utf8_lossy(&alpha_stream)
-        ),
-        format!("<< /Length {} >>\nstream\n{}endstream", content.len(), content),
-    ];
+    let content = format!("q\n{} 0 0 {} 0 0 cm\n/Im1 Do\nQ\n", width, height);
 
     let mut pdf = b"%PDF-1.4\n%\xFF\xFF\xFF\xFF\n".to_vec();
-    let mut offsets = Vec::with_capacity(objects.len() + 1);
-    offsets.push(0usize);
+    let mut offsets = vec![0usize];
 
-    for (index, object) in objects.iter().enumerate() {
+    let mut push_object = |number: usize, body: &[u8]| {
         offsets.push(pdf.len());
-        pdf.extend_from_slice(format!("{} 0 obj\n{}\nendobj\n", index + 1, object).as_bytes());
-    }
+        pdf.extend_from_slice(format!("{} 0 obj\n", number).as_bytes());
+        pdf.extend_from_slice(body);
+        pdf.extend_from_slice(b"\nendobj\n");
+    };
+
+    push_object(1, b"<< /Type /Catalog /Pages 2 0 R >>");
+    push_object(2, b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+
+    let page = format!(
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {} {}] /Resources << /XObject << /Im1 4 0 R >> >> /Contents 6 0 R >>",
+        width, height
+    );
+    push_object(3, page.as_bytes());
+
+    offsets.push(pdf.len());
+    pdf.extend_from_slice(b"4 0 obj\n");
+    pdf.extend_from_slice(
+        format!(
+            "<< /Type /XObject /Subtype /Image /Width {} /Height {} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /SMask 5 0 R /Length {} >>\nstream\n",
+            width, height, rgb_stream.len()
+        )
+        .as_bytes(),
+    );
+    pdf.extend_from_slice(&rgb_stream);
+    pdf.extend_from_slice(b"\nendstream\nendobj\n");
+
+    offsets.push(pdf.len());
+    pdf.extend_from_slice(b"5 0 obj\n");
+    pdf.extend_from_slice(
+        format!(
+            "<< /Type /XObject /Subtype /Image /Width {} /Height {} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /Length {} >>\nstream\n",
+            width, height, alpha_stream.len()
+        )
+        .as_bytes(),
+    );
+    pdf.extend_from_slice(&alpha_stream);
+    pdf.extend_from_slice(b"\nendstream\nendobj\n");
+
+    offsets.push(pdf.len());
+    pdf.extend_from_slice(b"6 0 obj\n");
+    pdf.extend_from_slice(format!("<< /Length {} >>\nstream\n", content.len()).as_bytes());
+    pdf.extend_from_slice(content.as_bytes());
+    pdf.extend_from_slice(b"endstream\nendobj\n");
 
     let xref_offset = pdf.len();
     pdf.extend_from_slice(format!("xref\n0 {}\n", offsets.len()).as_bytes());
@@ -129,8 +141,7 @@ fn encode_card_pdf(image: &RgbaImage) -> Result<Vec<u8>> {
     pdf.extend_from_slice(
         format!(
             "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{}\n%%EOF\n",
-            offsets.len(),
-            xref_offset
+            offsets.len(), xref_offset
         )
         .as_bytes(),
     );
