@@ -15,6 +15,7 @@ use crate::device::ActiveDeviceSession;
 pub const TARGET_WALLET_ASSETS: &[&str] = &[
     "cardBackgroundCombined@3x.png",
     "cardBackgroundCombined@2x.png",
+    "cardBackgroundCombined.pdf",
 ];
 
 pub const CACHE_FILES: &[&str] = &[
@@ -142,6 +143,7 @@ pub fn flash_wallet_skin<F, L>(
     udid: &str,
     card_hash: &str,
     skin_png: &[u8],
+    skin_pdf: &[u8],
     mut progress: F,
     mut log: L,
 ) -> Result<()>
@@ -152,16 +154,22 @@ where
     let pkpass_dir = format!("/var/mobile/Library/Passes/Cards/{}.pkpass", card_hash);
 
     log(&format!("Target Card Hash: {}", card_hash));
-    log(&format!("Skin payload size: {} bytes PNG", skin_png.len()));
+    log(&format!("Skin payload size: {} bytes PNG + {} bytes PDF", skin_png.len(), skin_pdf.len()));
 
     let total_steps = TARGET_WALLET_ASSETS.len() + 2 * CACHE_FILES.len();
     let mut step = 0;
 
-    for asset in TARGET_WALLET_ASSETS {
+    let assets = [
+        ("cardBackgroundCombined@3x.png", skin_png),
+        ("cardBackgroundCombined@2x.png", skin_png),
+        ("cardBackgroundCombined.pdf", skin_pdf),
+    ];
+
+    for (asset, payload) in assets {
         step += 1;
         progress(step, total_steps, &format!("Writing {}...", asset));
         log(&format!("[{}/{}] Writing primary asset {}...", step, total_steps, asset));
-        write_system_file(udid, &pkpass_dir, asset, skin_png, &mut log)
+        write_system_file(udid, &pkpass_dir, asset, payload, &mut log)
             .context(format!("Failed to write card asset {}", asset))?;
     }
 
