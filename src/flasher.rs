@@ -173,14 +173,22 @@ where
             .context(format!("Failed to write card asset {}", asset))?;
     }
 
+    let mut cache_failed = false;
     for ext in [".cache", ".pkcache"] {
         let cache_dir = format!("/var/mobile/Library/Passes/Cards/{}{}", card_hash, ext);
         for leaf in CACHE_FILES {
             step += 1;
             progress(step, total_steps, &format!("Clearing {}/{}...", ext, leaf));
             log(&format!("[{}/{}] Invaliding cache: {}/{}...", step, total_steps, ext, leaf));
-            let _ = write_system_file(udid, &cache_dir, leaf, b"corrupted", &mut log);
+            if let Err(err) = write_system_file(udid, &cache_dir, leaf, b"corrupted", &mut log) {
+                cache_failed = true;
+                log(&format!("Failed to invalidate cache {}/{}: {}", ext, leaf, err));
+            }
         }
+    }
+
+    if cache_failed {
+        bail!("One or more Wallet cache files could not be invalidated");
     }
 
     progress(total_steps, total_steps, "Card skin updated successfully!");
