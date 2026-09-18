@@ -196,10 +196,11 @@ impl AirCardApp {
         match PreparedSkin::from_path(&path) {
             Ok(skin) => {
                 self.add_log(format!(
-                    "Skin processed: source {}x{} resampled to 1536x969 PNG ({:.1} KB)",
+                    "Skin processed: source {}x{} resampled to 1536x969 PNG ({:.1} KB) + PDF ({:.1} KB)",
                     skin.source_width,
                     skin.source_height,
                     skin.png.len() as f32 / 1024.0,
+                    skin.pdf.len() as f32 / 1024.0,
                 ));
                 self.skin_texture = Some(ctx.load_texture(
                     "card-skin-preview",
@@ -207,11 +208,12 @@ impl AirCardApp {
                     egui::TextureOptions::LINEAR,
                 ));
                 self.status_msg = format!(
-                    "Prepared {} ({}x{} -> 1536x969 PNG, {:.1} KB)",
+                    "Prepared {} ({}x{} -> 1536x969 PNG, {:.1} KB + PDF {:.1} KB)",
                     path.file_name().and_then(|n| n.to_str()).unwrap_or("image"),
                     skin.source_width,
                     skin.source_height,
                     skin.png.len() as f32 / 1024.0,
+                    skin.pdf.len() as f32 / 1024.0,
                 );
                 self.source_path = Some(path);
                 self.skin = Some(skin);
@@ -309,13 +311,14 @@ impl AirCardApp {
         };
 
         let png_bytes = skin.png.clone();
+        let pdf_bytes = skin.pdf.clone();
         if let Some(ref flag) = self.scan_stop_flag {
             flag.store(true, std::sync::atomic::Ordering::Relaxed);
         }
         self.scanning_syslog = false;
         self.is_busy = true;
         self.progress_step = 0;
-        self.progress_total = 3;
+        self.progress_total = crate::flasher::TARGET_WALLET_ASSETS.len() + 2 * crate::flasher::CACHE_FILES.len();
         self.progress_msg = "Initiating card flash...".to_string();
         self.status_msg = "Writing card skin to iPhone...".to_string();
         self.add_log(format!("Starting card skin flash for hash: {} (UDID: {})", hash, udid));
@@ -330,6 +333,7 @@ impl AirCardApp {
                 &udid,
                 &hash,
                 &png_bytes,
+                &pdf_bytes,
                 move |step, total, msg| {
                     let _ = tx_progress.send(BackgroundTaskMessage::Progress {
                         step,
